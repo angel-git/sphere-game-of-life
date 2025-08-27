@@ -1,6 +1,8 @@
 package main
 
+import "core:fmt"
 import "core:math"
+import "core:strings"
 import rl "vendor:raylib"
 
 
@@ -11,7 +13,7 @@ RINGS :: 64 // latitude divisions
 SLICES :: 64 // longitude divisions
 
 DEFAULT_CHANCE_ALIVE :: 20 // initial chance a cell is alive
-UPDATE_INTERVAL_MS :: 0.4
+UPDATE_INTERVAL_MS :: 0.3
 DYING_INITIAL_INTENSITY :: 0.5 // 1.0 full red
 
 Game :: struct {
@@ -25,8 +27,8 @@ run_game :: proc() {
 	game_texture := rl.LoadRenderTexture(rl.GetScreenWidth(), rl.GetScreenHeight())
 	temp1_texture := rl.LoadRenderTexture(rl.GetScreenWidth(), rl.GetScreenHeight())
 	temp2_texture := rl.LoadRenderTexture(rl.GetScreenWidth(), rl.GetScreenHeight())
-    rl.SetTextureWrap(temp1_texture.texture, rl.TextureWrap.CLAMP)
-    rl.SetTextureWrap(temp2_texture.texture, rl.TextureWrap.CLAMP)
+	rl.SetTextureWrap(temp1_texture.texture, rl.TextureWrap.CLAMP)
+	rl.SetTextureWrap(temp2_texture.texture, rl.TextureWrap.CLAMP)
 	end_texture := rl.LoadRenderTexture(rl.GetScreenWidth(), rl.GetScreenHeight())
 
 	last_update := rl.GetTime()
@@ -50,7 +52,7 @@ run_game :: proc() {
 		apply_threshold_shader(game_texture, temp1_texture)
 		apply_blur_shader(temp1_texture, temp2_texture)
 		apply_bloom_shader(temp2_texture, game_texture, end_texture)
-		draw_in_screen(end_texture)
+		draw_in_screen(game, end_texture)
 
 		free_all(context.temp_allocator)
 	}
@@ -157,7 +159,7 @@ apply_threshold_shader :: proc(
 }
 
 @(private = "file")
-draw_in_screen :: proc(texture_to_draw: rl.RenderTexture2D) {
+draw_in_screen :: proc(game: Game, texture_to_draw: rl.RenderTexture2D) {
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.BLACK)
 	rl.DrawTexturePro(
@@ -168,8 +170,23 @@ draw_in_screen :: proc(texture_to_draw: rl.RenderTexture2D) {
 		0.0,
 		rl.WHITE,
 	)
-	rl.DrawFPS(10, 10)
+	// rl.DrawFPS(10, 10)
+	text := fmt.tprintf("Population: %d", count_alive(game))
+	rl.DrawText(strings.clone_to_cstring(text, context.temp_allocator), 10, 30, 20, rl.DARKGREEN)
 	rl.EndDrawing()
+}
+
+@(private = "file")
+count_alive :: proc(game: Game) -> int {
+	count := 0
+	for i in 0 ..< RINGS {
+		for j in 0 ..< SLICES {
+			if game.alive[i][j] {
+				count += 1
+			}
+		}
+	}
+	return count
 }
 
 @(private = "file")
@@ -223,10 +240,6 @@ draw_game_in_texture :: proc(
 				SPHERE_RADIUS * math.sin(theta1) * math.sin(phi1),
 			}
 
-			// Color pattern: alternate like a checkerboard
-			// color := (i + j) % 2 == 0 ? rl.LIGHTGRAY : rl.DARKGRAY
-
-
 			if game.alive[i][j] {
 				rl.DrawTriangle3D(corner1, corner2, corner3, alive_color)
 				rl.DrawTriangle3D(corner3, corner2, corner4, alive_color)
@@ -237,14 +250,6 @@ draw_game_in_texture :: proc(
 				rl.DrawTriangle3D(corner1, corner2, corner3, dead_color)
 				rl.DrawTriangle3D(corner3, corner2, corner4, dead_color)
 			}
-
-			// rl.DrawTriangle3D(corner1, corner2, corner3, color)
-			// rl.DrawTriangle3D(corner3, corner2, corner4, color)
-
-			// rl.DrawLine3D(corner1, corner2, rl.BLUE)
-			// rl.DrawLine3D(corner2, corner4, rl.BLUE)
-			// rl.DrawLine3D(corner4, corner3, rl.BLUE)
-			// rl.DrawLine3D(corner3, corner1, rl.BLUE)
 		}
 	}
 	rl.EndMode3D()
