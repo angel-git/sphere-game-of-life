@@ -11,10 +11,12 @@ RINGS :: 64 // latitude divisions
 SLICES :: 64 // longitude divisions
 
 DEFAULT_CHANCE_ALIVE :: 20 // initial chance a cell is alive
-UPDATE_INTERVAL_MS :: 0.5
+UPDATE_INTERVAL_MS :: 0.4
+DYING_INITIAL_INTENSITY :: 0.5 // 1.0 full red
 
 Game :: struct {
-	alive: [RINGS][SLICES]bool,
+	alive:    [RINGS][SLICES]bool,
+	previous: [RINGS][SLICES]bool,
 }
 
 main :: proc() {
@@ -22,16 +24,19 @@ main :: proc() {
 	camera := init_camera()
 
 	last_update := rl.GetTime()
+	fade_timer: f32 = 0.0
 
 	rl.SetConfigFlags({.BORDERLESS_WINDOWED_MODE})
 	rl.InitWindow(800, 800, "game of life")
 	rl.SetTargetFPS(60)
 
 	for !rl.WindowShouldClose() {
+		fade_timer += rl.GetFrameTime()
 		current_time := rl.GetTime()
 		if current_time - last_update >= UPDATE_INTERVAL_MS {
 			update_game_state(&game)
 			last_update = current_time
+			fade_timer = 0
 		}
 
 
@@ -39,8 +44,17 @@ main :: proc() {
 			rl.UpdateCamera(&camera, rl.CameraMode.FREE)
 		}
 
+		alive_color := rl.Color{255, 0, 0, 255}
+		dying_color := rl.Color {
+			u8(255 * math.max(0.0, DYING_INITIAL_INTENSITY - fade_timer / UPDATE_INTERVAL_MS)),
+			0,
+			0,
+			255,
+		}
+		dead_color := rl.Color{0, 0, 0, 255}
+
 		rl.BeginDrawing()
-		rl.ClearBackground(rl.BLACK)
+		rl.ClearBackground(rl.Color{10, 10, 15, 255})
 		rl.BeginMode3D(camera)
 
 		// Draw all patches
@@ -77,9 +91,16 @@ main :: proc() {
 				// Color pattern: alternate like a checkerboard
 				// color := (i + j) % 2 == 0 ? rl.LIGHTGRAY : rl.DARKGRAY
 
+
 				if game.alive[i][j] {
-					rl.DrawTriangle3D(corner1, corner2, corner3, rl.RED)
-					rl.DrawTriangle3D(corner3, corner2, corner4, rl.RED)
+					rl.DrawTriangle3D(corner1, corner2, corner3, alive_color)
+					rl.DrawTriangle3D(corner3, corner2, corner4, alive_color)
+				} else if game.previous[i][j] {
+					rl.DrawTriangle3D(corner1, corner2, corner3, dying_color)
+					rl.DrawTriangle3D(corner3, corner2, corner4, dying_color)
+				} else {
+					rl.DrawTriangle3D(corner1, corner2, corner3, dead_color)
+					rl.DrawTriangle3D(corner3, corner2, corner4, dead_color)
 				}
 
 				// rl.DrawTriangle3D(corner1, corner2, corner3, color)
@@ -122,6 +143,7 @@ init_game :: proc() -> Game {
 	for i in 0 ..< RINGS {
 		for j in 0 ..< SLICES {
 			game.alive[i][j] = (rl.GetRandomValue(0, 100) <= DEFAULT_CHANCE_ALIVE)
+			game.previous[i][j] = false
 		}
 	}
 	return game
@@ -139,6 +161,7 @@ update_game_state :: proc(game: ^Game) {
 			} else {
 				temp[i][j] = (neighbors == 3)
 			}
+			game.previous[i][j] = game.alive[i][j]
 		}
 	}
 	game.alive = temp
