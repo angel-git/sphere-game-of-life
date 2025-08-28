@@ -4,6 +4,7 @@ import "core:fmt"
 import "core:math"
 import "core:strings"
 import rl "vendor:raylib"
+import rlgl "vendor:raylib/rlgl"
 
 
 DEFAULT_CAMERA_XYZ :: 5
@@ -30,6 +31,21 @@ run_game :: proc() {
 	rl.SetTextureWrap(temp1_texture.texture, rl.TextureWrap.CLAMP)
 	rl.SetTextureWrap(temp2_texture.texture, rl.TextureWrap.CLAMP)
 	end_texture := rl.LoadRenderTexture(rl.GetScreenWidth(), rl.GetScreenHeight())
+	// skybox settings
+	cube_mesh := rl.GenMeshCube(1.0, 1.0, 1.0)
+	skybox := rl.LoadModelFromMesh(cube_mesh)
+	skybox.materials[0].shader = shaders[ShaderName.SkyBox]
+	env_map := rl.MaterialMapIndex.CUBEMAP
+	rl.SetShaderValue(
+		shaders[ShaderName.SkyBox],
+		rl.GetShaderLocation(shaders[ShaderName.SkyBox], "environmentMap"),
+		&env_map,
+		rl.ShaderUniformDataType.INT,
+	)
+	skybox.materials[0].maps[rl.MaterialMapIndex.CUBEMAP].texture = rl.LoadTextureCubemap(
+		images[.Space],
+		rl.CubemapLayout.AUTO_DETECT,
+	)
 
 	last_update := rl.GetTime()
 	fade_timer: f32 = 0.0
@@ -48,7 +64,7 @@ run_game :: proc() {
 			rl.UpdateCamera(&camera, rl.CameraMode.FREE)
 		}
 
-		draw_game_in_texture(&game, camera, game_texture, fade_timer)
+		draw_game_in_texture(&game, camera, game_texture, fade_timer, skybox)
 		apply_threshold_shader(game_texture, temp1_texture)
 		apply_blur_shader(temp1_texture, temp2_texture)
 		apply_bloom_shader(temp2_texture, game_texture, end_texture)
@@ -161,7 +177,6 @@ apply_threshold_shader :: proc(
 @(private = "file")
 draw_in_screen :: proc(game: Game, texture_to_draw: rl.RenderTexture2D) {
 	rl.BeginDrawing()
-	rl.ClearBackground(rl.BLACK)
 	rl.DrawTexturePro(
 		texture_to_draw.texture,
 		{0, 0, f32(texture_to_draw.texture.width), f32(-texture_to_draw.texture.height)},
@@ -195,10 +210,20 @@ draw_game_in_texture :: proc(
 	camera: rl.Camera3D,
 	game_texture: rl.RenderTexture2D,
 	fade_timer: f32,
+	skybox: rl.Model,
 ) {
 	rl.BeginTextureMode(game_texture)
 	rl.ClearBackground(rl.Color{10, 10, 15, 255})
 	rl.BeginMode3D(camera)
+
+	{
+	    // skybox
+		rlgl.DisableBackfaceCulling()
+		rlgl.DisableDepthMask()
+		rl.DrawModel(skybox, camera.position, 1.0, rl.WHITE)
+		rlgl.EnableBackfaceCulling()
+		rlgl.EnableDepthMask()
+	}
 
 	alive_color := rl.Color{255, 0, 0, 255}
 	dying_color := rl.Color {
@@ -252,8 +277,8 @@ draw_game_in_texture :: proc(
 			}
 		}
 	}
-	rl.EndMode3D()
 	rl.EndTextureMode()
+	rl.EndMode3D()
 }
 
 @(private = "file")
